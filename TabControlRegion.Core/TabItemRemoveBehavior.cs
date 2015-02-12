@@ -1,4 +1,5 @@
 ﻿using Infragistics.Windows.Controls;
+using Infragistics.Windows.Controls.Events;
 using Microsoft.Practices.Prism.Regions;
 using System.Windows;
 using System.Windows.Interactivity;
@@ -10,51 +11,56 @@ namespace TabControlRegion.Core
         protected override void OnAttached()
         {
             base.OnAttached();
-            AssociatedObject.AddHandler(TabItemEx.ClosedEvent, new RoutedEventHandler(TabItem_Closed));            
+            AssociatedObject.AddHandler(TabItemEx.ClosingEvent, new RoutedEventHandler(TabItem_Closing));
+            AssociatedObject.AddHandler(TabItemEx.ClosedEvent, new RoutedEventHandler(TabItem_Closed));
         }
 
         protected override void OnDetaching()
         {
             base.OnDetaching();
-            AssociatedObject.RemoveHandler(TabItemEx.ClosedEvent, new RoutedEventHandler(TabItem_Closed));           
+            AssociatedObject.RemoveHandler(TabItemEx.ClosingEvent, new RoutedEventHandler(TabItem_Closing));
+            AssociatedObject.RemoveHandler(TabItemEx.ClosedEvent, new RoutedEventHandler(TabItem_Closed));
         }
 
-        void TabItem_Closed(object sender, System.Windows.RoutedEventArgs e)
+        void TabItem_Closing(object sender, RoutedEventArgs e)
         {
-            var tabItem = e.OriginalSource as TabItemEx;
-            if (tabItem == null)
-                return;
-
-            var tabControl = e.Source as XamTabControl;
-            if (tabControl == null)
-                return;
-
-            IRegion region = RegionManager.GetObservableRegion(tabControl).Value;
+            IRegion region = RegionManager.GetObservableRegion(AssociatedObject).Value;
             if (region == null)
                 return;
 
-            RemoveItemFromRegion(tabItem.Content, region);
+            var args = (TabClosingEventArgs)e;
+
+            args.Cancel = !CanRemoveItem(GetItemFromTabItem(args.OriginalSource), region);
         }
 
-        void RemoveItemFromRegion(object item, IRegion region)
+        void TabItem_Closed(object sender, RoutedEventArgs e)
         {
-            var navigationContext = new NavigationContext(region.NavigationService, null);
+            IRegion region = RegionManager.GetObservableRegion(AssociatedObject).Value;
+            if (region == null)
+                return;
 
-            if (CanRemoveItem(item, navigationContext))
-            {
-                InvokeOnNavigatedFrom(item, navigationContext);
-                region.Remove(item);
-            }
+            RemoveItemFromRegion(GetItemFromTabItem(e.OriginalSource), region);
         }
 
-        bool CanRemoveItem(object item, NavigationContext navigationContext)
+        object GetItemFromTabItem(object source)
+        {
+            var tabItem = source as TabItemEx;
+            if (tabItem == null)
+                return null;
+
+            return tabItem.Content;
+        }
+
+        bool CanRemoveItem(object item, IRegion region)
         {
             bool canRemove = true;
+
+            var context = new NavigationContext(region.NavigationService, null);
 
             var confirmRequestItem = item as IConfirmNavigationRequest;
             if (confirmRequestItem != null)
             {
-                confirmRequestItem.ConfirmNavigationRequest(navigationContext, result =>
+                confirmRequestItem.ConfirmNavigationRequest(context, result =>
                 {
                     canRemove = result;
                 });
@@ -66,7 +72,7 @@ namespace TabControlRegion.Core
                 IConfirmNavigationRequest confirmRequestDataContext = frameworkElement.DataContext as IConfirmNavigationRequest;
                 if (confirmRequestDataContext != null)
                 {
-                    confirmRequestDataContext.ConfirmNavigationRequest(navigationContext, result =>
+                    confirmRequestDataContext.ConfirmNavigationRequest(context, result =>
                     {
                         canRemove = result;
                     });
@@ -74,6 +80,15 @@ namespace TabControlRegion.Core
             }
 
             return canRemove;
+        }
+
+        void RemoveItemFromRegion(object item, IRegion region)
+        {
+            var context = new NavigationContext(region.NavigationService, null);
+
+            InvokeOnNavigatedFrom(item, context);
+
+            region.Remove(item);
         }
 
         void InvokeOnNavigatedFrom(object item, NavigationContext navigationContext)

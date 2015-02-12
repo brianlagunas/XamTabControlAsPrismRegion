@@ -15,7 +15,7 @@ namespace TabControlRegion.Core
 
         public virtual bool IsNavigationTarget(NavigationContext navigationContext)
         {
-            return true;
+            return false;
         }
 
         public virtual void OnNavigatedFrom(NavigationContext navigationContext)
